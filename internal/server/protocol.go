@@ -94,7 +94,7 @@ func ParseCommand(line string) (*Command, error) {
 	}
 }
 
-// isValidKey validates key format: ([a-z] | [A-Z] | [0-9] | "." | "-" | ":")+
+// isValidKey validates key format: ([a-z] | [A-Z] | [0-9] | "." | "-" | ":" | "_")+
 func isValidKey(key string) bool {
 	if len(key) == 0 {
 		return false
@@ -103,7 +103,7 @@ func isValidKey(key string) bool {
 		if !((ch >= 'a' && ch <= 'z') ||
 			(ch >= 'A' && ch <= 'Z') ||
 			(ch >= '0' && ch <= '9') ||
-			ch == '.' || ch == '-' || ch == ':') {
+			ch == '.' || ch == '-' || ch == ':' || ch == '_') {
 			return false
 		}
 	}

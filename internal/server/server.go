@@ -109,7 +109,7 @@ func (s *Server) executeCommand(cmd *Command) string {
 			return fmt.Sprintf("error: %v", err)
 		}
 		if !found {
-			return "error: key not found"
+			return "error"
 		}
 		return string(value)
 
@@ -125,7 +125,7 @@ func (s *Server) executeCommand(cmd *Command) string {
 			return fmt.Sprintf("error: %v", err)
 		}
 		if !deleted {
-			return "error: key not found"
+			return "error"
 		}
 		return "success"
 

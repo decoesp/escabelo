@@ -312,6 +312,7 @@ func (e *Engine) flush() {
 	// Take the oldest immutable memtable
 	mt := e.immutableMemtables[0]
 	e.immutableMemtables = e.immutableMemtables[1:]
+	shouldTruncateWAL := len(e.immutableMemtables) == 0
 	e.mu.Unlock()
 
 	// Flush to SST
@@ -321,9 +322,12 @@ func (e *Engine) flush() {
 		return
 	}
 
-	// Truncate WAL after successful flush
-	if err := e.wal.Truncate(); err != nil {
-		fmt.Printf("WAL truncate failed: %v\n", err)
+	// Only truncate WAL when all immutable memtables have been flushed
+	// This prevents data loss if server crashes while flushing
+	if shouldTruncateWAL {
+		if err := e.wal.Truncate(); err != nil {
+			fmt.Printf("WAL truncate failed: %v\n", err)
+		}
 	}
 
 	e.stats.mu.Lock()
