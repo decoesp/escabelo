@@ -139,16 +139,16 @@ func (e *Engine) Put(key string, value []byte) error {
 	// Write to memtable
 	e.mu.Lock()
 	e.memtable.Put(key, value)
-	e.stats.mu.Lock()
-	e.stats.Writes++
-	e.stats.MemTableSize = e.memtable.Size()
-	e.stats.mu.Unlock()
-
-	// Check if memtable is full
-	if e.memtable.IsFull() {
+	needRotate := e.memtable.IsFull()
+	if needRotate {
 		e.rotateMemTable()
 	}
 	e.mu.Unlock()
+
+	// Update stats outside of engine lock to reduce contention
+	e.stats.mu.Lock()
+	e.stats.Writes++
+	e.stats.mu.Unlock()
 
 	return nil
 }
@@ -208,14 +208,16 @@ func (e *Engine) Delete(key string) (bool, error) {
 	// Write tombstone to memtable
 	e.mu.Lock()
 	deleted := e.memtable.Delete(key)
-	e.stats.mu.Lock()
-	e.stats.Deletes++
-	e.stats.mu.Unlock()
-
-	if e.memtable.IsFull() {
+	needRotate := e.memtable.IsFull()
+	if needRotate {
 		e.rotateMemTable()
 	}
 	e.mu.Unlock()
+
+	// Update stats outside of engine lock
+	e.stats.mu.Lock()
+	e.stats.Deletes++
+	e.stats.mu.Unlock()
 
 	return deleted, nil
 }
@@ -238,8 +240,14 @@ func (e *Engine) Keys() ([]string, error) {
 	}
 	e.mu.RUnlock()
 
-	// Get from SST files (simplified - would need full scan)
-	// For now, just return memtable keys
+	// Get from SST files using sparse index (much faster)
+	sstKeys, err := e.sstManager.GetAllKeys()
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range sstKeys {
+		keySet[key] = true
+	}
 
 	keys := make([]string, 0, len(keySet))
 	for key := range keySet {
@@ -356,20 +364,32 @@ func (e *Engine) walSyncer() {
 // GetStats returns current engine statistics
 func (e *Engine) GetStats() Stats {
 	e.stats.mu.RLock()
-	defer e.stats.mu.RUnlock()
-
-	stats := *e.stats
+	writes := e.stats.Writes
+	reads := e.stats.Reads
+	deletes := e.stats.Deletes
+	flushes := e.stats.Flushes
+	compactions := e.stats.Compactions
+	e.stats.mu.RUnlock()
 
 	// Update dynamic stats
 	e.mu.RLock()
-	stats.MemTableSize = e.memtable.Size()
-	stats.SSTCount = int64(len(e.sstManager.GetAllSSTables()))
+	memTableSize := e.memtable.Size()
+	sstCount := int64(len(e.sstManager.GetAllSSTables()))
 	e.mu.RUnlock()
 
 	walSize, _ := e.wal.Size()
-	stats.WALSize = walSize
 
-	return stats
+	return Stats{
+		Writes:        writes,
+		Reads:         reads,
+		Deletes:       deletes,
+		Flushes:       flushes,
+		Compactions:   compactions,
+		MemTableSize:  memTableSize,
+		SSTCount:      sstCount,
+		WALSize:       walSize,
+		TotalDataSize: 0,
+	}
 }
 
 // Close shuts down the engine gracefully

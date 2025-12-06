@@ -17,7 +17,7 @@ var (
 	dataDir            = flag.String("data-dir", "./data", "Directory for data storage")
 	memtableSize       = flag.Int64("memtable-size", 64*1024*1024, "Max memtable size in bytes (default 64MB)")
 	compactionInterval = flag.Duration("compaction-interval", 5*time.Minute, "Compaction interval")
-	walSyncInterval    = flag.Duration("wal-sync-interval", 1*time.Second, "WAL sync interval")
+	walSyncInterval    = flag.Duration("wal-sync-interval", 100*time.Millisecond, "WAL sync interval")
 )
 
 func main() {

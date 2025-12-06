@@ -69,8 +69,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	log.Printf("New connection from %s", conn.RemoteAddr())
 
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
+	// Use larger buffers for better throughput
+	reader := bufio.NewReaderSize(conn, 64*1024) // 64KB read buffer
+	writer := bufio.NewWriterSize(conn, 64*1024) // 64KB write buffer
 
 	for {
 		// Read until \r separator

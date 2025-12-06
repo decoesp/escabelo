@@ -12,15 +12,17 @@ import (
 
 // WAL (Write-Ahead Log) provides durability
 type WAL struct {
-	mu       sync.Mutex
-	file     *os.File
-	writer   *bufio.Writer
-	filePath string
+	mu         sync.Mutex
+	file       *os.File
+	writer     *bufio.Writer
+	filePath   string
+	bufSize    int
+	pendingOps int32 // atomic counter for pending operations
 }
 
 // WALEntry represents a log entry
 type WALEntry struct {
-	OpType    byte   // 1=Put, 2=Delete
+	OpType    byte // 1=Put, 2=Delete
 	Key       string
 	Value     []byte
 	Timestamp int64
@@ -43,10 +45,12 @@ func NewWAL(dataDir string) (*WAL, error) {
 		return nil, err
 	}
 
+	bufSize := 256 * 1024 // 256KB buffer for better throughput
 	return &WAL{
 		file:     file,
-		writer:   bufio.NewWriter(file),
+		writer:   bufio.NewWriterSize(file, bufSize),
 		filePath: filePath,
+		bufSize:  bufSize,
 	}, nil
 }
 
@@ -82,8 +86,14 @@ func (w *WAL) Append(entry *WALEntry) error {
 		return err
 	}
 
-	// Flush to ensure durability
-	return w.writer.Flush()
+	// Group commit: only flush if buffer is nearly full
+	// This allows batching many writes together for better throughput
+	// The periodic syncer will handle durability
+	if w.writer.Buffered() >= w.bufSize-4096 {
+		return w.writer.Flush()
+	}
+
+	return nil
 }
 
 // Replay reads all entries from the WAL and applies them to a memtable

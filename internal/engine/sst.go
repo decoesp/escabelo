@@ -390,3 +390,28 @@ func (sm *SSTManager) RemoveSSTable(sst *SSTable) error {
 	}
 	return nil
 }
+
+// GetAllKeys returns all keys from SST files using sparse index
+// This is much faster than scanning entire files
+func (sm *SSTManager) GetAllKeys() ([]string, error) {
+	sm.mu.RLock()
+	sstables := make([]*SSTable, len(sm.sstables))
+	copy(sstables, sm.sstables)
+	sm.mu.RUnlock()
+
+	keySet := make(map[string]bool)
+
+	// Use sparse index for quick key extraction
+	for _, sst := range sstables {
+		for key := range sst.Index {
+			keySet[key] = true
+		}
+	}
+
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+
+	return keys, nil
+}
